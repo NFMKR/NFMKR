@@ -21,3 +21,5 @@ tags:
 console.log("dfadad")
 ```
 8. [themne](https://hexo.io/themes/#responsive)
+9. `npm install hexo-cli -g`在服务器终端进行安装hexo博客框架
+10. 遇到在网页中打开博客是空白的页面，错误首先设置网站，网站目录，网站目录设置，将设置成public文件夹，然后在_config.yml中的theme设置成stellar，再在服务器终端进行下载`npm i hexo-theme-stellar`，下载后重新`npm run build` ，成功在服务器上访问博客。
