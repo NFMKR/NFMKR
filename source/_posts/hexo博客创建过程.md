@@ -9,7 +9,7 @@ tags:
 [hexo博客框架](https://github.com/theme-shoka-x/hexo-theme-shokaX?tab=readme-ov-file)
 2. 在hexo官方文档进行具体搭建自己的博客
 [hexo官方文档](https://hexo.io/zh-cn/docs/themes)
-3. 建站用了`hexo init nfmkr` `cd nfmkr` `npm install`
+3. 建站用了`hexo init xxxxx` `cd xxxxx` `npm install`
 4. 在_config.yml中配置了title,subtitle,description,keywords,author
 5. 下载主题theme
 [下载的博客:里面有很多博客使用教程](https://xaoxuu.com/wiki/stellar/#start)
