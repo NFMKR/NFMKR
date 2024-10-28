@@ -12,7 +12,7 @@ tags:
 3. 建站用了`hexo init xxxxx` `cd xxxxx` `npm install`
 4. 在_config.yml中配置了title,subtitle,description,keywords,author
 5. 下载主题theme
-[下载的博客:里面有很多博客使用教程](https://xaoxuu.com/wiki/stellar/#start)
+[下载的博客:里面有很多博客使用教程]我使用的主题(https://xaoxuu.com/wiki/stellar/#start)
 [下载的github仓库链接](https://github.com/xaoxuu/hexo-theme-stellar)
 6. 写博客文章
    命令`hexo new myfirstpost`

@@ -41,15 +41,102 @@ tags:
 
 ## express框架的搭建，环境的配置部署，编写风格的统一
 
+### express的框架结构搭建
+
+1. 安装 Node.js ```node -v npm -v```
+2. 创建项目文件夹
+3. 初始化项目 npm init -y
+4. 安装 Express ```npm install express```
+5. 创建项目结构
+(将路由，模型，中间件，启动服务器，初始化express应用都再这个里面)
+```
+mkdir src
+cd src
+touch index.js
+```
+6. 编写基本的 Express 服务器
+```
+const express = require('express');
+const app = express();
+const port = 3000;
+
+//中间件
+app.use(express.json());
+
+//路由
+app.get('/', (req, res) => {
+  res.send("hello world");
+});
+
+//启动服务器
+app.listen(port, () => {
+  console.log(`Server is running on port ${port}`);
+});
+```
+7. 设置路由
+```
+const express = require('express');
+const router = express.Router();
+
+//示例路由
+router.get('/cards', (req, res) => {
+  //处理获取卡牌的逻辑
+  res.send(''获取卡牌)；
+})；
+
+//导出路由
+module.exports = router;
+```
+在src/index.js 中引入路由：
+const route = require('./router');
+app.user('/api', routes);
+8. 启动服务器
+node src/index.js(npm run dev是先设置好的，设置成保存代码文件后自动重新启动)
+
+9. 代码保存后自动启动服务器的实现
+
+### 安装部署相关环境
+
+1. nodejs的安装LTS版
+2. MongoDB安装community版本
+3. 开发工具vscode和微信开发者工具
+4. 安装依赖：express：后端框架，mongoose：用于连接和操作mongodb数据库，dotenv：管理环境变量，body-parser：解析请求体数据，nodemon：开发时自动重启服务器, 创建.env文件配置数据库
+
+### 项目部署和测试与调试
+
+1. 本地服务器部署：使用 PM2 或直接使用 node 启动。
+2. 云服务器部署：如阿里云、腾讯云、Vercel。
+``` 
+npm install pm2 -g
+pm2 start index.js
+
+```
+3.  本地测试:Postman
+4.  接口编写apifox
+
+### 上线注意事项
+
+1. HTTPS：微信小程序只能请求 HTTPS 地址。
+2. 域名备案：如果使用国内服务器，确保你的域名已经备案。
+3. 日志与监控：部署 PM2 后使用 pm2 logs 查看运行日志。
+
+### 编写风格的统一
+
+Airbnb JavaScript Style Guide：广泛使用、严格的风格。
+Standard JS：简洁而实用的风格。
+Prettier：自动格式化代码。
+
 ## 抽卡页api的开发
 
-### 横幅api
+### 横幅的api
 
 ### 抽卡卡包封面api
 
 ### 抽卡机api
 
 ### 抽卡卡池概率实现
+
+抽到的卡要关联卡池/我的背包，卡包
 
 ### 商品api
 
@@ -109,23 +196,138 @@ return res.status(200).json({
 
 ### 图鉴卡包api
 
+判断卡牌的张数，并进行记录
+
 ### 卡牌api
+
+### 图鉴和卡牌的关联
 
 ## 用户页面api的开发
 
 ### 登录api
 
+中间件的auth的认证，生成token，用于其它api需要用户判断的地方
+
 ### 支付api
 
+1. 微信支付相关资料的获取
+商户号（mch_id）
+商户密钥（API Key）
+APPID（小程序的 APPID）
+APP Secret（小程序的密钥）
+2. 小程序支付的工作流程概览
+用户点击支付，小程序请求后端生成订单信息。
+后端调用微信支付统一下单 API，生成预支付交易单 prepay_id。
+小程序根据 prepay_id 调用微信支付组件。
+微信支付系统处理支付，并回调通知后端支付结果。
+3. 微信接口的写入
+anxios：用于HTTP请求
+crypto：签名校验
+一个下单支付接口
+```
+const axios = require('axios');
+const crypto = require('crypto');
+
+// 商户和小程序信息
+const APPID = '你的小程序APPID';
+const MCH_ID = '你的商户号';
+const API_KEY = '你的API密钥';
+const NOTIFY_URL = 'https://你的服务器地址/wechat/notify'; // 支付结果通知地址
+
+// 工具函数：生成签名
+function createSign(params) {
+  const str = Object.keys(params)
+    .sort()
+    .map(key => `${key}=${params[key]}`)
+    .join('&') + `&key=${API_KEY}`;
+  
+  return crypto.createHash('md5').update(str).digest('hex').toUpperCase();
+}
+
+// 微信统一下单接口
+async function createUnifiedOrder(req, res) {
+  const { openid, totalFee, outTradeNo } = req.body;
+
+  const params = {
+    appid: APPID,
+    mch_id: MCH_ID,
+    nonce_str: Math.random().toString(36).substr(2, 15),
+    body: '订单描述',
+    out_trade_no: outTradeNo,
+    total_fee: totalFee, // 单位为分
+    spbill_create_ip: req.ip,
+    notify_url: NOTIFY_URL,
+    trade_type: 'JSAPI',
+    openid: openid
+  };
+
+  // 生成签名并添加到参数
+  params.sign = createSign(params);
+
+  try {
+    const { data } = await axios.post(
+      'https://api.mch.weixin.qq.com/pay/unifiedorder',
+      `<xml>
+        ${Object.entries(params).map(([key, value]) => `<${key}>${value}</${key}>`).join('')}
+      </xml>`,
+      { headers: { 'Content-Type': 'application/xml' } }
+    );
+
+    const prepayIdMatch = data.match(/<prepay_id><!\[CDATA\[(.*)\]\]><\/prepay_id>/);
+    if (prepayIdMatch) {
+      res.json({ prepayId: prepayIdMatch[1] });
+    } else {
+      res.status(500).send('微信下单失败');
+    }
+  } catch (error) {
+    console.error('微信下单接口错误:', error);
+    res.status(500).send('微信下单失败');
+  }
+}
+
+module.exports = createUnifiedOrder;
+
+```
+一个支付回调接口
+```
+const express = require('express');
+const bodyParser = require('body-parser');
+const crypto = require('crypto');
+
+const router = express.Router();
+router.use(bodyParser.text({ type: 'text/xml' }));
+
+// 支付结果通知接口
+router.post('/wechat/notify', (req, res) => {
+  const xml = req.body;
+
+  // 解析 XML（可使用 xml2js 解析）
+  if (xml.includes('<return_code><![CDATA[SUCCESS]]></return_code>')) {
+    console.log('支付成功');
+    // 在这里更新订单状态
+    res.send('<xml><return_code><![CDATA[SUCCESS]]></return_code></xml>');
+  } else {
+    console.error('支付失败');
+    res.send('<xml><return_code><![CDATA[FAIL]]></return_code></xml>');
+  }
+});
+
+module.exports = router;
+
+```
 ### 我的背包api
 
 ### 我的卡包api
 
 ### 地址api
 
+获取，写入，删除，修改，设置为默认地址，同时他们都需要用户认证。
+
 ### 用户信息api
 
 ### 发货订单api
+
+通过我的背包的卡牌中的唯一id进行发货，生成相应的发货订单，发货订单里面的状态可以进行自我调换。
 
 ### 抽卡订单api
 
@@ -140,4 +342,5 @@ return res.status(200).json({
 ## 代码与服务器的上传
 
 ### 服务器的使用
+
 ### git和gitlab
