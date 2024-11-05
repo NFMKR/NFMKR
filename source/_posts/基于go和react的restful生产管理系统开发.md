@@ -34,6 +34,7 @@ func main() {
 7. 进入项目目录```cd my-react-app```
 8. 安装 Axios（用于 HTTP 请求）```npm install axios```
 9. 启动 React 应用```npm start```
+10. 部署：在服务器上运行npm install 生成相应配置，然后运行npm run build 生成build文件夹，打开宝塔面板在该域名的的网站目录处指向相应的build文件夹即可。
 
 
 

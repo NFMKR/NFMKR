@@ -1,7 +1,7 @@
 ---
 title: 基于express的微信小程序开发
 date: 2024-10-24 15:13:45
-tags:
+tags:将看不懂的代码，放进来分析总结解释理解
 ---
 ## 目录
 
@@ -130,13 +130,71 @@ Prettier：自动格式化代码。
 
 ### 横幅的api
 
+1. 模型Schema，
+2. 导入mongoose，const mongoose = require("@/config/mongodb");
+3. 定义schema
+4. 定义横幅模型：图片，详细，自动创建时间
+5. 导出模型
+6. api书写
+
 ### 抽卡卡包封面api
+
+
 
 ### 抽卡机api
 
 ### 抽卡卡池概率实现
 
 抽到的卡要关联卡池/我的背包，卡包
+1. 模型定义：
+```
+const poolSchema = new mongoose.Schema({
+  name: String,
+  cards : [{type: mongoose.Schema.Types.ObjectId, ref: 'Card'}],
+  totalCards: Number
+  });
+
+  const Pool = mongoose.model('Pool', poolSchema);
+```
+2. 创建卡牌和卡池
+3. 抽卡逻辑实现
+```
+function drawCard(pool){
+  const cards = pool.cards;
+  const probabilities = cards.map(card => card.probability);
+  
+  cnst cumulativeProbabilities = probabilities.reduce((acc, cur) => acc + cur, 0);
+  
+  const randomValue = Math.random() * cumulativeProbabilities;
+  
+  for (let i = 0; i < cards.length; i++) {
+    if (randomValue <= probabilities[i]) {
+      return cards[i];
+    }
+  }
+  return null;
+}
+```
+4. 抽卡接口
+```
+const express = require('express');
+const router = express.Router();
+
+router.get('/draw', async (req, res) => {
+  const {poolId} = req.body;
+  const pool = await Pool.findById(poolId).populate('cards');
+  
+  if (!pool) {
+    return res.status(404).json({error: 'Pool not found'});
+  }
+  const drawCard = drawCard(pool);
+  
+  res.json(drawCard);
+});
+
+module.exports = router;
+```
+
 
 ### 商品api
 
@@ -200,13 +258,47 @@ return res.status(200).json({
 
 ### 卡牌api
 
+### 卡池api
+
 ### 图鉴和卡牌的关联
 
+## 管理员模型Manager
+
+管理员的数据模型，包括了管理员的基本信息和一些基本的业务逻辑（如自动更新更新时间）。这个模型可以用于管理管理员账户的数据库操作。
+
 ## 用户页面api的开发
+
+### 用户模型接口
+
+1. Schema 是 Mongoose 中用于定义数据结构的构造函数
+2. function:函数，在模型中可以写生成随机昵称的函数。先定义函数function，然后定义常量随机的内容，再定义一个变量let的随机名字，使用for循环来遍历，const randomIndex = Math.floor(Math.random() * characters.length);：这是循环体内的第一行代码。Math.random()函数生成一个0到1之间的随机数（不包括1），然后乘以characters.length（characters数组的长度）。Math.floor()函数用于取这个乘积的整数部分（向下取整）。这样，randomIndex就是一个0到characters.length - 1之间的整数，用于随机选择characters数组中的一个索引。
+3. 用户函数模型，名字，生日，电话号，头像，密码等其中名字等要设置为``` trim: true,```trim是一个模式属性，它指定在保存文档之前应该从字符串字段的两端移除空格
+4. 接口导入redis缓存，auth处理身份验证，validate验证请求数据的有效性，user模型，generatecode工具函数用于生成验证码，jwt生成JSON Web Tokens（JWT），express，express-validator请求数据的验证和清理，dotenv从.env文件中加载环境变量的Node.js库，sms工具函数sendSms，用于发送短信，mongoose。
+5. 手机号验证
+```
+  const validateUserPhone = [
+    body("phone)
+  ]
+```
+6. 登录logon，使用Validate
+7. 发送验证码认证
+8. 修改用户信息
+9. 用户卡包
+
 
 ### 登录api
 
 中间件的auth的认证，生成token，用于其它api需要用户判断的地方
+
+#### auth中间件
+
+#### authFun中间件
+
+1. 这个中间件用于保护路由，确保只有持有有效 Token 的用户才能访问。如果 Token 无效或用户不存在，它会返回 401 未授权状态码。如果验证成功，它会将用户信息添加到请求对象中，并继续执行后续的中间件或路由处理函数。
+#### authManager中间件
+
+1. 这个中间件用于保护需要管理员权限的路由，确保只有持有有效 Token 的管理员才能访问。它还使用 Redis 来缓存 Token 的有效性，以减少对数据库的查询次数，提高性能。如果 Token 无效或管理员不存在，它会返回 401 未授权状态码。如果验证成功，它会更新管理员的最后登录时间，并将管理员信息添加到请求对象中，然后继续执行后续的中间件或路由处理函数。
+
 
 ### 支付api
 
@@ -215,12 +307,12 @@ return res.status(200).json({
 商户密钥（API Key）
 APPID（小程序的 APPID）
 APP Secret（小程序的密钥）
-2. 小程序支付的工作流程概览
+1. 小程序支付的工作流程概览
 用户点击支付，小程序请求后端生成订单信息。
 后端调用微信支付统一下单 API，生成预支付交易单 prepay_id。
 小程序根据 prepay_id 调用微信支付组件。
 微信支付系统处理支付，并回调通知后端支付结果。
-3. 微信接口的写入
+1. 微信接口的写入
 anxios：用于HTTP请求
 crypto：签名校验
 一个下单支付接口
@@ -325,11 +417,36 @@ module.exports = router;
 
 ### 用户信息api
 
+### appconfig更新信息的定义
+
+### 自动发送邮件的定义
+
 ### 发货订单api
 
 通过我的背包的卡牌中的唯一id进行发货，生成相应的发货订单，发货订单里面的状态可以进行自我调换。
 
 ### 抽卡订单api
+
+### 积分订单api
+
+积分商品的兑换，创建，获取。积分订单的创建，获取。
+
+## 入口文件的研究
+
+1. 引入依赖
+express：Web 应用框架，用于创建服务器和路由。
+path：Node.js 核心模块，用于处理文件路径。
+dotenv：用于加载环境变量的模块。
+fs：Node.js 核心模块，用于文件系统操作。
+2. 配置环境变量
+3. 设置别名
+4. CORS 中间件
+5. 用户代理中间件
+6. 路由配置：
+引入并使用多个路由模块，这些模块定义了应用程序的不同路由和处理函数。
+使用 app.use() 方法将路由模块挂载到服务器上。
+7. 中间件配置
+8. 启动服务器
 
 ## mongodb的使用
 
@@ -344,3 +461,40 @@ module.exports = router;
 ### 服务器的使用
 
 ### git和gitlab
+
+## 项目总结
+
+### 框架理解
+
+1. .husky/：Husky是一个Git hooks工具，用于在提交代码之前运行脚本。这个 Husky 脚本的作用是在每次 Git 提交之前，通过 lint-staged 检查所有暂存的文件，确保它们符合项目定义的代码质量标准。如果检查失败，提交将会被阻止，直到代码符合标准。这是一种常见的实践，用于在团队开发中保持代码质量。
+2. .vscode/:Visual Studio Code的配置文件，比如代码格式化、linting规则等。
+3. basic/：放置一些文件信息
+4. node_modules/：这个文件夹是Node.js项目的依赖库文件夹，由npm install命令生成，包含了项目所有依赖的第三方库。
+5. src/：这个文件夹通常包含了项目的源代码。
+6. types/：TypeScript的类型定义文件。
+7. .editorconfig：这是一个配置文件，用于定义代码编辑器的通用配置，如缩进、编码等。
+8. .env：这是一个环境变量文件，用于存储项目的配置信息，如数据库连接字符串、API密钥等。
+9. .env.development：这是开发环境的环境变量文件，可能包含了开发环境特有的配置。
+10. .gitignore：这是一个Git配置文件，用于指定哪些文件或文件夹不应该被Git版本控制。
+11. .prettierrc：这是Prettier的配置文件，用于定义代码格式化的规则。
+12. basic.json：项目里的草稿本，不计入项目。
+13. checkcert.sh：这是一个Shell脚本文件，可能用于检查SSL证书的有效性。
+14. ecosystem.config.js：这是PM2的配置文件，PM2是一个Node.js的进程管理器，用于管理和保持应用的持续运行。
+15. .eslint.config.js：这是ESLint的配置文件，用于定义JavaScript代码的linting规则。
+16. .jest.config.js：这是Jest的配置文件，Jest是一个JavaScript测试框架。
+17. nodemon.json：这是Nodemon的配置文件，Nodemon是一个开发工具，用于在开发过程中自动重启Node.js应用。
+18. package-lock.json：这是一个由npm生成的文件，用于锁定项目依赖的确切版本。
+19. package.json：这是Node.js项目的配置文件，包含了项目的元数据、依赖、脚本等信息。
+20. README.md：这是项目的自述文件，通常包含了项目的介绍、安装和使用说明等。
+21. tsconfig.json：这是TypeScript的配置文件，用于定义TypeScript编译器的编译选项。
+
+### src文件夹
+
+1. __tests__：用于存放测试代码。
+2. cert：包含了SSL证书文件，用于配置HTTPS服务，确保数据传输的安全性。
+3. config：用于存放配置文件，数据库配置和redis配置。
+4. middleware：这个文件夹用于存放中间件函数。中间件是在请求处理流程中执行特定任务的函数，如身份验证、日志记录、请求解析等。
+5. models：这个文件夹用于存放数据模型，如果是使用ORM（对象关系映射）的话，这里会定义与数据库表对应的模型。
+6. router：这个文件夹用于存放路由定义。路由是定义应用如何处理不同URL请求的代码，通常与控制器或处理函数相关联。
+7. utils：这个文件夹用于存放工具函数或辅助函数，这些函数可以在应用的多个地方被复用，如日期处理、字符串操作等。
+8. index.js：这个文件通常是应用的入口点。它可能用于初始化应用、配置服务器、连接数据库、启动路由等。在Express应用中，这个文件通常会创建一个Express实例并开始监听端口。
