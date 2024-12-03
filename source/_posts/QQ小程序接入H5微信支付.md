@@ -1,0 +1,349 @@
+---
+title: qq小程序接入微信支付
+date: 2024-12-02 10:04:47
+tags:
+---
+#### 官方文档链接
+
+1. [H5接入文档](https://q.qq.com/wiki/develop/miniprogram/server/virtual-payment/wx_pay.html#%E6%8E%A5%E5%85%A5%E6%AD%A5%E9%AA%A4)
+2. [接口调用凭证getAccessToken](https://q.qq.com/wiki/develop/game/server/open-port/getAccessToken.html)
+3. [H5下单API](https://pay.weixin.qq.com/wiki/doc/apiv3/apis/chapter3_3_1.shtml)
+4. [H5支付开发指引](https://pay.weixin.qq.com/wiki/doc/apiv3/open/pay/chapter2_6_2.shtml)
+
+# **QQ小程序接入微信支付（H5支付）教程**
+
+### 目录
+**1. 从零到完成的接入步骤**
+**2. jsapi转到h5支付的步骤**
+
+## **一、从0到完成的接入步骤**
+
+#### 1. **开通微信支付**
+   - 在 **微信支付商户平台** 开通具备 H5 支付能力的微信支付商户号。
+   - 开通路径：
+     - 登录微信支付商户平台
+     - 进入 **产品中心** -> **我的产品** -> **H5支付**
+     - 申请开通 **H5支付**，然后设置好商户号。
+
+#### 2. **绑定微信支付商户号**
+   - 将微信支付商户号与微信 AppID 绑定。
+   - 开通路径：
+     - 进入微信支付商户平台 -> **产品中心** -> **AppID账号管理**
+     - 绑定你的 **微信 AppID**，确保该商户号与微信 AppID 关联。
+
+#### 3. **在 QQ 小程序后台开通微信支付**
+   - 登录 **QQ 小程序开发者管理端**，进入 **支付接入** -> **微信支付**。
+   - 在 **QQ 小程序开发者管理端**中绑定微信支付商户号。
+   - 设置 **支付结果通知回调地址**，该地址接收微信支付结果的通知。
+
+#### 4. **获取微信支付的 H5 支付跳转链接**
+   - 使用 QQ 小程序提供的 **代理下单 API** 获取微信支付跳转链接。
+   - 需要调用 **QQ 小程序后台的统一下单接口**，并在请求中传递相关参数（如 `appid`, `access_token`, `notify_url` 等）来获取支付链接。
+
+#### 5. **调用 `qq.requestWxPayment` 来发起支付**
+   - 在 QQ 小程序中，你不能直接使用微信支付的原生接口呼起支付，而是需要通过调用 `qq.requestWxPayment` 来启动微信支付。
+   - `qq.requestWxPayment` 需要传入由后台下单接口返回的 **H5 支付跳转链接**。
+
+#### 6. **接入的支付API版本选择**
+   - **V3版**（包含直连模式、服务商模式、合单支付API）：
+     - **直连模式**：适用于商户号直接与微信支付连接。
+     - URL：`https://api.q.qq.com/wxpay/v3/pay/transactions/h5?appid=YourQQAppID&access_token=YourAccessToken&real_notify_url=UrlEncodedNotifyUrl`
+
+#### 7. **请求参数说明**
+   - **appid**：QQ 小程序的 appid。
+   - **access_token**：通过调用 QQ 小程序后台接口获取的 access_token。
+   - **real_notify_url**：微信支付通知回调地址。如果不填写，默认为在 QQ 小程序后台设置的支付回调地址。
+   - **notify_url**（V2版）或 **notify_url**（V3版）：支付回调的地址，直接接收微信支付的异步通知。
+
+#### 8. **微信支付的支付回调地址**
+   - **V2 版**：`https://api.q.qq.com/wxpay/notify`
+   - **V3 版**：`https://api.q.qq.com/wxpay/v3/notify/MCH_ID/OUT_TRADE_NO`
+     - `MCH_ID` 和 `OUT_TRADE_NO` 分别为下单时的商户号和订单号。
+     - 直连模式填普通商户号和订单号；服务商模式填服务商商户号和订单号；合单支付填合单商户号和订单号。
+
+#### 9. **签名问题**
+   - 在 **V3版支付** 中，签名时应使用 **微信支付的原版URL**，不应包含 `appid`, `access_token`, `real_notify_url` 等参数。
+
+#### 10. **错误码及解决方法**
+   - **9030**：商户号未绑定。解决方法：在 QQ 小程序开发者管理端绑定商户号。
+   - **9031**：notify_url 设置错误。解决方法：按照文档说明正确设置 `notify_url`。
+   - **9032**：没有开通微信支付。解决方法：去 QQ 小程序开发者管理端开通微信支付。
+   - **9034**：请求 body 解析失败。解决方法：检查请求 body 内容，确保格式正确。
+
+#### 11. **发起微信支付**
+   - 通过 `qq.requestWxPayment` 发起支付请求，传入返回的 **H5 支付链接**。当支付完成后，支付结果会通过配置的回调地址发送给你的服务器。
+
+#### 12. **支付结果回调处理**
+   - 服务器根据微信支付回调的内容，验证签名，处理支付结果（如更新订单状态）。
+   - 确保支付回调地址和服务器逻辑能够正确处理支付状态的变化（如支付成功、支付失败等）。
+---
+
+在 H5支付中，获取到跳转链接后，后续的流程是自动化的，基本上可以按照以下几个步骤进行描述：
+
+#### 13. **用户点击支付链接**
+   - 当用户在你的小程序中发起支付请求时，后端会生成一个支付链接，这个链接通常是一个指向微信支付页面的URL。你可以把这个链接展示给用户，或者通过重定向、弹窗等方式引导用户点击进入支付页面。
+
+#### 14. **用户跳转到微信支付页面**
+   - 用户点击支付链接后，会自动跳转到微信支付的H5支付页面。这个页面是由微信支付平台渲染和处理的，包括支付金额、订单信息、支付方式选择等内容。
+   - 在这个过程中，用户无需手动输入支付信息，微信支付会自动获取用户的账户信息（如openid）并显示支付界面。用户可以选择支付方式（如微信支付、银行卡等）并完成支付。
+
+#### 15. **用户完成支付**
+   - 用户在微信支付页面完成支付后，微信会根据支付结果自动跳转回你的回调地址（即`notify_url`）。这时，支付流程就会结束，微信会通过后台回调通知你的服务器支付是否成功。
+
+#### 16. **支付结果回调（`notify_url`）**
+   - 支付成功后，微信支付会向你在支付请求时指定的回调 URL（即 `notify_url`）发送支付结果的通知。
+   - 回调消息中会包含订单的支付状态信息（如 `trade_state`），你可以根据这个信息判断支付是否成功。
+
+#### 17. **后端处理支付结果**
+   - 当你的服务器收到支付回调通知后，可以进行验证（比如签名验证）并确认支付状态。
+   - 如果支付成功，后端通常会更新订单状态为“已支付”，并可能触发一些业务流程（如发货、账户充值等）。
+
+#### 18. **返回支付结果给前端**
+   - 在支付完成后，你可以通过前端的接口或者再次引导用户跳转到特定页面，告诉用户支付结果。
+   - 如果支付成功，可以跳转到订单详情页、支付成功页面，或者给用户一个“支付成功”的提示。
+   - 如果支付失败，则可以跳转到支付失败页面，或者显示失败信息，并引导用户重新支付。
+
+#### 典型流程总结：
+1. **生成支付链接**：后端生成支付请求并返回给前端一个支付链接。
+2. **用户跳转支付页面**：用户点击链接后跳转到微信支付页面。
+3. **用户完成支付**：用户选择支付方式并完成支付。
+4. **支付结果通知**：微信支付通过回调通知你的后端支付结果。
+5. **处理支付结果**：后端确认支付状态，并更新订单信息。
+
+#### 实际场景中的一些细节：
+- **支付页面展示**：在微信支付页面，用户无需登录，因为微信会自动通过浏览器或微信客户端获取用户的身份信息（如微信账号）。
+- **支付状态**：如果用户支付完成，支付页面通常会提示支付成功；如果支付失败，则会提示用户支付失败，并允许重新尝试支付。
+- **支付中断或超时**：如果用户在支付过程中中断或支付超时，通常也会显示相关提示。
+
+总结来说，H5支付的后续步骤相对简洁，重点在于后端如何接收支付回调并处理支付结果，前端则只需要提供支付链接并展示支付界面。微信支付会处理大部分细节，确保支付体验顺畅。
+
+---
+
+### 总结
+接入 **QQ 小程序的微信 H5 支付** 涉及多个步骤，从商户号开通、回调地址配置，到接口的调用与签名。开发者需要了解 **V2版** 和 **V3版** 的区别，并根据需求选择合适的支付方式（直连模式、服务商模式、合单支付）。务必确保回调地址配置正确，且接口调用符合微信支付的要求。
+
+通过以上步骤，你可以成功接入并实现 **微信 H5 支付** 功能，方便 QQ 小程序用户完成支付流程。
+
+## **二、jsapi转到h5支付的步骤**
+### 微信支付接入 QQ 小程序指南
+
+在将微信小程序的支付功能迁移到 QQ 小程序时，最大的挑战之一是支付方式的适配。微信支付的 JSAPI 支付方式在微信小程序中是直接支持的，但 QQ 小程序只支持 H5 支付方式。本文将详细讲解如何将微信支付的 JSAPI 支付转换为 H5 支付。
+
+#### 1. **理解 H5 支付与 JSAPI 支付的区别**
+
+- **JSAPI 支付**：专门为微信小程序提供的支付方式，允许用户直接在小程序内发起支付请求。JSAPI 支付的流程包括用户通过微信小程序发起支付，后端生成支付参数并返回给前端，由前端调用微信支付接口 `wx.requestPayment` 发起支付。
+
+- **H5 支付**：适用于 Web 环境（包括 QQ 小程序的 WebView）。用户通过浏览器（如微信浏览器或 QQ 浏览器）发起支付，支付过程由后端生成支付链接，用户通过该链接进入微信支付页面进行支付。
+
+#### 2. **H5 支付的流程**
+
+H5 支付流程包括以下几个步骤：
+
+1. **用户发起支付请求**：用户点击支付按钮，前端通过 API 向后端发送支付请求，后端生成订单。
+
+2. **后端调用微信支付统一下单接口**：后端调用微信支付的统一下单接口，生成支付订单并获取 `prepay_id` 和 `mweb_url`。
+
+3. **生成支付链接**：将支付信息拼接成支付 URL，供前端跳转到微信支付页面。
+
+4. **前端跳转到支付页面**：前端使用 `window.location.href` 或 `wx.navigateTo`（通过 WebView）将用户跳转到微信支付页面。
+
+5. **支付回调与订单更新**：微信支付完成后，会通过支付回调接口通知支付结果，后端接收通知并更新订单状态。
+
+---
+
+#### 3. **修改代码实现 H5 支付**
+
+以下是如何将微信支付从 JSAPI 支付转换为 H5 支付的具体实现步骤。
+
+##### 3.1 后端请求微信支付统一下单接口
+
+后端通过调用微信支付的统一下单接口，生成订单，并获取支付的 URL (`mweb_url`)。
+
+###### 后端实现（Node.js 示例）
+
+```javascript
+const axios = require('axios');
+
+async function createWxPayOrder(openid, amount, order_no) {
+  const wxPayParams = {
+    appid: WECHAT_APP_ID, // 微信小程序的 AppID
+    mch_id: WECHAT_MERCHANT_ID, // 微信商户号
+    nonce_str: generateNonceStr(), // 随机字符串
+    body: '商品描述', // 商品描述
+    out_trade_no: order_no, // 商户订单号
+    total_fee: amount,  // 支付金额，单位：分
+    spbill_create_ip: '用户IP地址', // 用户的 IP 地址
+    notify_url: 'https://your-backend.com/payment_notify',  // 支付成功回调地址
+    trade_type: 'MWEB',  // H5支付类型
+    payer: { openid: openid },  // 用户的 OpenID
+  };
+
+  const sign = generateSign(wxPayParams, API_SECRET); // 生成签名
+  wxPayParams.sign = sign;
+
+  const response = await axios.post('https://api.mch.weixin.qq.com/pay/unifiedorder', wxPayParams);
+
+  // 解析返回的 XML 响应并获取 mweb_url
+  const mwebUrl = parseXml(response.data).mweb_url;
+
+  return mwebUrl;
+}
+```
+
+在该代码中，我们通过微信支付的统一下单接口创建支付订单，并获取返回的 `mweb_url`，这是 H5 支付的链接，用户通过该链接发起支付。
+
+##### 3.2 前端跳转到支付页面
+
+前端接收到 `mweb_url` 后，可以将其传递给用户，并通过 WebView 或跳转到微信支付页面。
+
+###### 前端实现（QQ 小程序 WebView 示例）
+
+```javascript
+// 在 QQ 小程序中，通过 WebView 打开支付页面
+wx.navigateTo({
+  url: '/pages/webview/webview?url=' + encodeURIComponent(mwebUrl)
+});
+```
+
+在 Web 环境中，使用 `window.location.href` 跳转到支付页面：
+
+```javascript
+// 使用 window.location.href 跳转到支付页面
+window.location.href = mwebUrl;
+```
+
+##### 3.3 支付回调处理
+
+微信支付完成后，会向你的 `notify_url` 发送支付结果通知。你需要在后端处理该回调，验证支付结果，并更新订单状态。
+
+###### 后端处理支付回调
+
+```javascript
+// 后端处理支付回调
+const wxpay = require('wechatpay-axios-plugin');
+
+app.post('/payment_notify', async (req, res) => {
+  try {
+    const result = await wxpay.v3.pay.notifications.verify(req.body);
+    if (result) {
+      // 支付成功，更新订单状态
+      const order = await Order.findOne({ out_trade_no: req.body.out_trade_no });
+      order.status = 'PAID';
+      await order.save();
+
+      // 向微信支付确认通知已处理
+      res.send('<xml><return_code><![CDATA[SUCCESS]]></return_code></xml>');
+    } else {
+      res.send('<xml><return_code><![CDATA[FAIL]]></return_code></xml>');
+    }
+  } catch (error) {
+    console.error('支付回调验证失败:', error);
+    res.send('<xml><return_code><![CDATA[FAIL]]></return_code></xml>');
+  }
+});
+```
+
+在这个步骤中，微信支付会将支付结果通过回调通知发送到你的 `notify_url`，后端需要验证通知的签名，并确认支付是否成功。如果支付成功，更新订单状态并回复给微信支付一个成功的响应。
+
+---
+
+#### 4. **注意事项**
+
+1. **支付状态检查**：H5 支付方式下，用户支付完成后，你需要在支付回调中确认支付状态。确保订单的状态被正确更新。回调通知是微信支付支付成功的确认依据。
+
+2. **前端跳转**：QQ 小程序通过 WebView 打开支付页面时，要确保 WebView 设置正确，并且微信支付页面能够正常加载。对于其他 Web 环境，可以使用 `window.location.href` 跳转到支付页面。
+
+3. **签名与证书管理**：确保后端签名与证书的安全性，使用 HTTPS 协议来保障数据传输的安全。
+
+4. **微信支付的支付限制**：H5 支付仅支持部分场景，如用户必须使用微信支付的浏览器来完成支付。确保你的用户使用的浏览器支持微信支付。
+
+---
+
+#### 5. **总结**
+
+将微信支付从 JSAPI 支付方式转接到 QQ 小程序的 H5 支付方式，主要涉及以下几个步骤：
+
+1. **后端发起支付**：使用微信支付的统一下单接口，指定 `trade_type: 'MWEB'`，获取 `mweb_url` 支付链接。
+2. **前端跳转**：将返回的支付链接通过 WebView 或 `window.location.href` 跳转给用户。
+3. **支付回调处理**：在支付完成后，微信会向你的 `notify_url` 发送支付回调，你需要验证支付状态并更新订单状态。
+
+通过上述修改，你可以将微信支付集成到 QQ 小程序中，实现 H5 支付功能。
+
+
+### 三、步骤总结
+### 1. 获取 `access_token`
+首先，你需要使用 QQ 小程序的 `appid` 和 `secret`，以及 `grant_type` 为 `client_credential` 来获取 `access_token`。你会通过 `https://api.q.qq.com/api/getToken` 调用获取 `access_token`。
+
+- **请求方法**：GET
+- **请求URL**：`https://api.q.qq.com/api/getToken`
+- **请求参数**：
+  - `grant_type`: 固定为 `client_credential`
+  - `appid`: 你的小程序的 AppID
+  - `secret`: 你的小程序的 AppSecret
+
+### 2. 生成支付订单
+一旦获得 `access_token`，你就可以利用它来生成微信支付订单。具体步骤如下：
+
+- **请求方法**：POST
+- **请求URL**：`https://api.q.qq.com/wxpay/v3/pay/transactions/h5`
+- **请求参数**：
+  - `appid`: 你的 QQ 小程序的 `appid`
+  - `access_token`: 获取的 `access_token`
+  - `real_notify_url`: 支付成功后微信支付回调的通知地址
+  - 其他支付相关的参数，比如订单号、商品描述、金额、用户IP、支付场景（H5支付等）
+
+**请求体示例**：
+```json
+{
+  "mchid": "1900006XXX",
+  "out_trade_no": "H51217752501201407033233368018",
+  "appid": "wxdace645e0bc2cXXX",
+  "description": "Image形象店-深圳腾大-QQ公仔",
+  "notify_url": "https://your.callback.url",
+  "amount": {
+    "total": 1,
+    "currency": "CNY"
+  },
+  "scene_info": {
+    "payer_client_ip": "127.0.0.1",
+    "h5_info": {
+      "type": "Wap"
+    }
+  }
+}
+```
+
+### 3. 支付签名
+在生成订单后，你需要按照微信支付的要求对订单参数进行签名。
+
+- **签名算法**：通常使用 `RSA` 或者 `HMAC-SHA256`。
+- 你需要对请求的部分参数进行签名，并将签名附加到请求中，以确保请求的安全性。
+
+### 4. 支付跳转 URL
+微信支付接口会返回一个支付跳转链接，你可以将该链接传递给前端，由前端调用微信支付。
+
+**返回字段示例**：
+```json
+{
+  "h5_url": "https://wx.tenpay.com/cgi-bin/mmpayweb-bin/checkmweb?prepay_id=wx2016121516420242444321ca0631331346&package=1405458241"
+}
+```
+
+### 5. 支付回调地址
+在支付完成后，微信支付会向你的回调地址发送支付结果通知。你需要设置回调地址来处理支付成功或失败的情况。
+
+**回调地址示例**：
+- **V2**：`https://api.q.qq.com/wxpay/notify`
+- **V3**：`https://api.q.qq.com/wxpay/v3/notify/MCH_ID/OUT_TRADE_NO`
+
+你需要在接收到回调时验证支付结果，确保订单状态正确，并根据支付结果进行后续处理。
+
+### 总结
+从你的描述来看，基本的步骤已经涵盖了：
+1. 获取 `access_token`。
+2. 通过 `access_token` 和其他支付参数生成微信支付订单。
+3. 进行支付签名。
+4. 返回支付跳转链接。
+5. 配置支付回调地址并处理回调。
+
+确认这些步骤后，主要的工作内容应该已经涵盖了。如果有任何步骤未完成，或有其它细节问题可以进一步沟通。
