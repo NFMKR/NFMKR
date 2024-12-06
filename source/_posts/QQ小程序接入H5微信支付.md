@@ -59,7 +59,7 @@ tags:
    - **V2 版**：`https://api.q.qq.com/wxpay/notify`
    - **V3 版**：`https://api.q.qq.com/wxpay/v3/notify/MCH_ID/OUT_TRADE_NO`
      - `MCH_ID` 和 `OUT_TRADE_NO` 分别为下单时的商户号和订单号。
-     - 直连模式填普通商户号和订单号；服务商模式填服务商商户号和订单号；合单支付填合单商户号和订单号。
+     - 直连模式填普通商户号和订单号。
 
 #### 9. **签名问题**
    - 在 **V3版支付** 中，签名时应使用 **微信支付的原版URL**，不应包含 `appid`, `access_token`, `real_notify_url` 等参数。
@@ -137,7 +137,6 @@ tags:
 ### 总结
 接入 **QQ 小程序的微信 H5 支付** 涉及多个步骤，从商户号开通、回调地址配置，到接口的调用与签名。开发者需要了解 **V2版** 和 **V3版** 的区别，并根据需求选择合适的支付方式（直连模式、服务商模式、合单支付）。务必确保回调地址配置正确，且接口调用符合微信支付的要求。
 
-通过以上步骤，你可以成功接入并实现 **微信 H5 支付** 功能，方便 QQ 小程序用户完成支付流程。
 
 ## **二、jsapi转到h5支付的步骤**
 ### 微信支付接入 QQ 小程序指南
@@ -179,7 +178,7 @@ H5 支付流程包括以下几个步骤：
 ```javascript
 const axios = require('axios');
 
-async function createWxPayOrder(openid, amount, order_no) {
+async function createWxPayOrder(amount, order_no) {
   const wxPayParams = {
     appid: WECHAT_APP_ID, // 微信小程序的 AppID
     mch_id: WECHAT_MERCHANT_ID, // 微信商户号
@@ -190,7 +189,6 @@ async function createWxPayOrder(openid, amount, order_no) {
     spbill_create_ip: '用户IP地址', // 用户的 IP 地址
     notify_url: 'https://your-backend.com/payment_notify',  // 支付成功回调地址
     trade_type: 'MWEB',  // H5支付类型
-    payer: { openid: openid },  // 用户的 OpenID
   };
 
   const sign = generateSign(wxPayParams, API_SECRET); // 生成签名
@@ -364,13 +362,13 @@ app.post('/payment_notify', async (req, res) => {
 确认这些步骤后，主要的工作内容应该已经涵盖了。如果有任何步骤未完成，或有其它细节问题可以进一步沟通。
 
 
-## h5回调接口编写
+## 四、h5回调接口编写
 
-# `h5callback.js` 修改总结
+### `h5callback.js` 修改总结
 
 本次修改旨在将现有的微信小程序使用的 JSAPI 支付回调逻辑，迁移并适配到 QQ 小程序中使用的 H5 微信支付回调。主要目标是移除对 `openid` 的依赖，简化订单处理流程，并确保支付回调的安全性与数据完整性。
 
-## 关键修改点
+#### 关键修改点
 
 1. **移除 `openid` 相关逻辑**：
    - H5 支付无需 `openid`，因此在回调处理中完全移除了获取和使用 `openid` 的代码。
@@ -397,7 +395,7 @@ app.post('/payment_notify', async (req, res) => {
    - 保持详细的错误处理和日志记录，便于后续调试和维护。
    - 捕捉并记录回调处理中的任何异常，确保系统的稳定性。
 
-## 代码结构调整
+#### 代码结构调整
 
 - **签名验证与数据解密**：
   - `verifyAndDecrypt` 中间件继续负责验证微信支付的签名，并解密加密的数据。
@@ -413,7 +411,7 @@ app.post('/payment_notify', async (req, res) => {
 - **发货操作**：
   - 调用 `wx_deliver` 时，不传递 `openid`，改用其他标识来执行发货逻辑，确保用户收到相应物品或服务。
 
-## 基础知识回顾
+#### 基础知识回顾
 
 1. **H5 微信支付流程**：
    - **前端**：用户在 QQ 小程序中发起支付，前端获取 `mweb_url` 并跳转完成支付。
@@ -431,7 +429,7 @@ app.post('/payment_notify', async (req, res) => {
    - 使用 `async`/`await` 简化异步操作，提高代码可读性。
    - 通过 `try...catch` 捕捉并处理异步操作中的错误，保持系统稳定运行。
 
-## 总结
+#### 总结
 
 通过上述修改，`h5callback.js` 现已成功适配 QQ 小程序的 H5 微信支付回调，不再依赖 `openid`，简化了订单处理流程，同时保持了系统的安全性和稳定性。关键调整包括：
 
@@ -439,5 +437,3 @@ app.post('/payment_notify', async (req, res) => {
 - **优化订单处理逻辑**，确保仅通过 `out_trade_no` 正确关联订单状态。
 - **保持数据安全**，继续使用签名验证和数据解密，确保回调数据的真实性。
 - **提升系统灵活性**，通过使用 `userId` 等标识进行业务逻辑操作。
-
-建议在完成修改后，进行全面的测试，确保 H5 支付流程在 QQ 小程序中能稳定运行，所有回调处理逻辑无误。
