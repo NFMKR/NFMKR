@@ -437,3 +437,192 @@ app.post('/payment_notify', async (req, res) => {
 - **优化订单处理逻辑**，确保仅通过 `out_trade_no` 正确关联订单状态。
 - **保持数据安全**，继续使用签名验证和数据解密，确保回调数据的真实性。
 - **提升系统灵活性**，通过使用 `userId` 等标识进行业务逻辑操作。
+
+
+## 前后端完整步骤
+
+要在 **QQ 小程序** 中接入 **微信 H5 支付**，需要以下完整步骤：
+
+---
+
+### 一、前置条件
+1. **QQ 小程序配置**：
+   - 确保 QQ 小程序已经完成账号注册，并获取了 AppID 和 AppSecret。
+
+2. **微信支付配置**：
+   - 微信支付商户号（MchID）已开通，并完成配置。
+   - 获取微信支付的 API 密钥（API Key）和证书（如果需要）。
+
+3. **后端准备**：
+   - 准备一个中间服务器，用于生成预支付订单 (`prepay_id`) 和验证支付签名。
+
+---
+
+### 二、接入步骤
+
+#### 1. 在微信支付平台添加域名
+确保后端接口域名已经在微信支付后台 **支付设置** > **支付授权目录** 中配置。
+
+---
+
+#### 2. 前端请求支付接口
+
+在 QQ 小程序中，用户触发支付行为时（如点击“立即支付”按钮）发送请求到后端：
+
+```javascript
+qq.request({
+  url: 'https://your-server-domain/createOrder', // 请求后端接口
+  method: 'POST',
+  data: {
+    orderId: 'your_order_id', // 订单号
+    totalFee: 100, // 金额（分）
+    body: '订单描述',
+  },
+  success: (res) => {
+    if (res.data.success) {
+      // 获取后端返回的支付参数
+      const paymentData = res.data.paymentData;
+      // 调用 H5 支付页面
+      qq.navigateTo({
+        url: `/pages/webview/webview?url=${encodeURIComponent(paymentData.mweb_url)}`,
+      });
+    } else {
+      console.error('支付订单创建失败:', res.data.message);
+    }
+  },
+  fail: (err) => {
+    console.error('请求失败:', err);
+  },
+});
+```
+
+---
+
+#### 3. 后端生成微信支付订单
+
+在后端，调用微信支付统一下单接口生成 `prepay_id` 和 H5 支付链接 (`mweb_url`)。
+
+**示例代码（Node.js）**：
+
+```javascript
+const axios = require('axios');
+const crypto = require('crypto');
+const xml2js = require('xml2js');
+
+// 生成随机字符串
+function generateNonceStr() {
+  return crypto.randomBytes(16).toString('hex');
+}
+
+// 创建支付订单
+async function createWeChatOrder(req, res) {
+  const { orderId, totalFee, body } = req.body;
+
+  const params = {
+    appid: 'your_wechat_appid', // 微信公众账号 AppID
+    mch_id: 'your_merchant_id', // 微信商户号
+    nonce_str: generateNonceStr(),
+    body,
+    out_trade_no: orderId,
+    total_fee: totalFee,
+    spbill_create_ip: req.ip, // 用户的真实 IP
+    notify_url: 'https://your-server-domain/wechat/notify', // 支付回调通知
+    trade_type: 'MWEB', // H5 支付类型
+  };
+
+  // 签名生成
+  const stringToSign = Object.keys(params)
+    .sort()
+    .map((key) => `${key}=${params[key]}`)
+    .join('&') + `&key=your_api_key`;
+  params.sign = crypto.createHash('md5').update(stringToSign).digest('hex').toUpperCase();
+
+  // 发送请求到微信支付
+  try {
+    const xmlData = new xml2js.Builder().buildObject(params);
+    const { data } = await axios.post('https://api.mch.weixin.qq.com/pay/unifiedorder', xmlData, {
+      headers: { 'Content-Type': 'application/xml' },
+    });
+
+    // 解析返回 XML
+    const result = await xml2js.parseStringPromise(data, { explicitArray: false });
+    if (result.return_code === 'SUCCESS' && result.result_code === 'SUCCESS') {
+      return res.json({ success: true, paymentData: result });
+    }
+
+    res.json({ success: false, message: result.return_msg });
+  } catch (error) {
+    console.error('微信支付请求失败:', error);
+    res.json({ success: false, message: '微信支付请求失败' });
+  }
+}
+```
+
+---
+
+#### 4. 配置支付结果回调接口
+
+微信支付会在支付完成后调用你设置的 `notify_url`，携带支付结果数据。你需要验证签名并更新订单状态。
+
+**回调验证示例代码**：
+
+```javascript
+app.post('/wechat/notify', async (req, res) => {
+  const xmlData = req.body;
+
+  // 解析 XML
+  const result = await xml2js.parseStringPromise(xmlData, { explicitArray: false });
+
+  // 验签
+  const signData = { ...result };
+  delete signData.sign;
+  const stringToSign = Object.keys(signData)
+    .sort()
+    .map((key) => `${key}=${signData[key]}`)
+    .join('&') + `&key=your_api_key`;
+  const calculatedSign = crypto.createHash('md5').update(stringToSign).digest('hex').toUpperCase();
+
+  if (calculatedSign !== result.sign) {
+    console.error('签名验证失败');
+    return res.send('<xml><return_code>FAIL</return_code></xml>');
+  }
+
+  // 更新订单状态
+  if (result.result_code === 'SUCCESS') {
+    // 更新数据库订单为已支付
+    console.log(`订单 ${result.out_trade_no} 支付成功`);
+  }
+
+  res.send('<xml><return_code>SUCCESS</return_code></xml>');
+});
+```
+
+---
+
+#### 5. 用户完成支付跳转
+
+在用户完成支付后，微信支付 H5 页面会返回到支付结果页面。确保页面状态处理得当，并引导用户返回 QQ 小程序。
+
+---
+
+### 三、注意事项
+
+1. **跨域问题**：H5 支付链接需要通过 QQ 小程序的 WebView 显示，因此需要确保 WebView 页面和后端域名已配置。
+   
+2. **安全性**：
+   - 严格验证微信支付回调的签名。
+   - 后端接口需要通过 HTTPS 提供服务。
+
+3. **兼容性**：
+   - QQ 小程序内的 WebView 页面可能受限制，测试是否可以正常加载微信支付页面。
+
+4. **测试环境**：
+   - 使用微信支付提供的沙箱环境，进行测试订单创建和支付验证。
+
+---
+
+### 四、流程图
+
+1. 用户发起支付请求 → 2. QQ 小程序调用后端生成订单 → 3. 后端请求微信统一下单接口 → 4. 返回 H5 支付链接 → 5. WebView 显示支付页面 → 6. 微信支付回调通知更新订单状态。
+
+通过这些步骤，QQ 小程序可以顺利集成微信 H5 支付功能。
