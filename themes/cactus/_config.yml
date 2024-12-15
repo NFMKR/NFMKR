@@ -13,12 +13,19 @@ direction: ltr
 # A pair 'Key: url' will result in a link to 'url' with the name 'Key' in the
 # navigation menu. Optionally, you can add translations for the 'Key' in
 # languages/*.yml
+# 分类别名配置
+category_map:
+  项目: projects
+  知识: knowledge
+  问题: problems
+  工具: tools
+# 导航菜单配置
 nav:
   首页: /
-  知识: /knowledge/
-  问题: /problems/
-  工具: /tools/
-  项目: /projects/
+  项目: /categories/项目/
+  知识: /categories/知识/
+  问题: /categories/问题/
+  工具: /categories/工具/
 
 
 # Links to your social media accounts.
@@ -72,7 +79,7 @@ post:
 # Customize the copyright years
 # Note: if start_year/end_year not provided, will use current year.
 copyright:
-  start_year: 2016
+  start_year: 2024
   end_year:
 
 # Customize the 404 page

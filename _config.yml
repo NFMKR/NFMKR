@@ -64,9 +64,12 @@ index_generator:
   per_page: 10
   order_by: -date
 
+# 添加默认分类配置
 # Category & Tag
 default_category: uncategorized
+# 分类别名配置
 category_map:
+  项目: projects
 tag_map:
 
 # Metadata elements
@@ -102,3 +105,7 @@ theme: cactus
 ## Docs: https://hexo.io/docs/one-command-deployment
 deploy:
   type: ''
+# 分类
+category_generator:
+  per_page: 10    # 每页显示的文章数
+  order_by: -date # 按日期降序排序
