@@ -1,11 +1,8 @@
 ---
 title: C-路由定义
 date: 2024-12-11 16:32:57
-category: 
-  - 知识
-  - 工具
-  - 项目
-  - 问题
+categories: 
+  - 笔记
 ---
 ## 5. Express 路由配置
 

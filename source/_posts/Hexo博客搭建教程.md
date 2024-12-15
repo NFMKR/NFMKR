@@ -1,7 +1,8 @@
 ---
 title: hexo博客创建过程
 date: 2024-10-19 19:29:04
-tags:
+categories: 
+  - 文章
 ---
 # 创建hexo的步骤
 

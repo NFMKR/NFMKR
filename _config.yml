@@ -5,7 +5,7 @@
 # Site
 title: NFMKR
 subtitle: '成长之路'
-description: 'development-back'
+description: '&nbsp;&nbsp;这里是一个专注于技术成长的个人博客。作为一名 Node.js 服务端开发工程师，我记录着通往全栈工程师的进阶之路。在这里，你可以找到项目开发实战笔记、技术原理深度解析文章，以及各类开发工具的使用心得。在 AI 技术迅猛发展的今天，我始终保持学习的热情，期待在技术浪潮中不断突破自我，用代码构建更美好的未来。'
 keywords:
 author: Jason White
 language: zh-CN
@@ -66,11 +66,7 @@ index_generator:
 
 # 添加默认分类配置
 # Category & Tag
-default_category: uncategorized
-# 分类别名配置
-category_map:
-  项目: projects
-tag_map:
+default_category: uncategorizeds
 
 # Metadata elements
 ## https://developer.mozilla.org/en-US/docs/Web/HTML/Element/meta

@@ -1,8 +1,8 @@
 ---
 title: C-文件配置
 date: 2024-12-11 16:32:09
-     categories: 
-       - 工具
+categories: 
+  - 笔记
 ---
 # 深度总结项目的配置文件
 
