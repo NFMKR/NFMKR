@@ -8,35 +8,6 @@ categories:
 
 在软件开发过程中，测试是确保代码质量、功能正确性和系统稳定性的关键环节。对于本项目而言，测试部分涵盖了单元测试、集成测试以及端到端测试，使用了多种工具和框架，如 Jest、Supertest 和 Sinon。本文将深入总结项目中测试部分的实际应用知识，包括使用的工具、测试策略、关键文件及其实现方法。
 
-## 目录结构回顾
-
-为了更好地理解测试部分的组织结构，以下是项目中与测试相关的主要目录和文件结构：
-
-```
-project-root/
-├── src/
-│   ├── controllers/
-│   ├── middleware/
-│   ├── models/
-│   ├── routes/
-│   ├── utils/
-│   └── index.js
-├── tests/
-│   ├── controllers/
-│   │   └── userController.test.js
-│   ├── middleware/
-│   │   └── authMiddleware.test.js
-│   ├── models/
-│   │   └── userModel.test.js
-│   ├── routes/
-│   │   └── userRoutes.test.js
-│   ├── utils/
-│   │   └── jwtUtils.test.js
-│   └── setup.js
-├── jest.config.js
-├── package.json
-└── README.md
-```
 
 ## 1. 测试策略
 

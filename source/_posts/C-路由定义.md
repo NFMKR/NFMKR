@@ -4,77 +4,307 @@ date: 2024-11-11 16:32:57
 categories: 
   - 笔记
 ---
-## 5. Express 路由配置
+## 1. 路由基础结构
 
-项目中通过 `src/router/` 目录组织不同的 API 路由，分模块管理各类功能：
+### 1.1 基础路由
+```javascript
+const express = require('express');
+const router = express.Router();
+const controller = require('../controllers/someController');
+const { authenticate } = require('../middleware/auth');
+const validate = require('../middleware/validate');
 
-### 5.1 `src/router/activity/registration.js`
+// 基础 CRUD 路由
+router.get('/', controller.getAll);
+router.get('/:id', controller.getById);
+router.post('/', authenticate, validate.createSchema, controller.create);
+router.put('/:id', authenticate, validate.updateSchema, controller.update);
+router.delete('/:id', authenticate, controller.delete);
 
-**路径**: `src/router/activity/registration.js`
+module.exports = router;
+```
 
-**作用**: 处理与活动登记相关的路由，如用户参加活动、提交登记信息等。
+### 1.2 路由分组结构
+```
+src/
+└── routes/
+    ├── index.js           # 路由聚合
+    ├── auth.routes.js     # 认证相关路由
+    ├── user.routes.js     # 用户相关路由
+    └── api/              # API 版本控制
+        ├── v1/
+        └── v2/
+```
 
-**使用步骤**:
+## 2. 路由中间件实现
 
-1. **定义路由**:
+### 2.1 认证中间件
+```javascript
+const jwt = require('jsonwebtoken');
 
-   使用 Express Router 定义具体的路由处理函数。
+const authenticate = async (req, res, next) => {
+  try {
+    const token = req.headers.authorization?.split(' ')[1];
+    if (!token) {
+      return res.status(401).json({ message: 'No token provided' });
+    }
 
-2. **引入中间件和模型**:
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    req.user = decoded;
+    next();
+  } catch (error) {
+    res.status(401).json({ message: 'Invalid token' });
+  }
+};
 
-   引入必要的中间件和 Mongoose 模型，用于认证和数据库操作。
+module.exports = { authenticate };
+```
 
-   ```javascript
-   const express = require("express");
-   const { body } = require("express-validator");
-   const Validate = require("../../middleware/Validate");
-   const auth = require("../../middleware/auth");
-   const Registration = require("../../models/activity/Registration");
+### 2.2 验证中间件
+```javascript
+const { validationResult } = require('express-validator');
 
-   const router = express.Router();
+const validate = (validations) => {
+  return async (req, res, next) => {
+    await Promise.all(validations.map(validation => validation.run(req)));
 
-   router.post(
-     "/register",
-     auth,
-     [
-       body("phoneNumber").isMobilePhone(),
-       body("realName").isString().notEmpty(),
-       // 其他验证规则...
-     ],
-     Validate,
-     async (req, res) => {
-       try {
-         const { phoneNumber, realName, activityType } = req.body;
+    const errors = validationResult(req);
+    if (errors.isEmpty()) {
+      return next();
+    }
 
-         // 创建新的登记记录
-         const newRegistration = new Registration({
-           userId: req.user._id,
-           phoneNumber,
-           realName,
-           activityType,
-           // 其他字段...
-         });
+    res.status(400).json({ 
+      errors: errors.array().map(err => ({
+        field: err.param,
+        message: err.msg
+      }))
+    });
+  };
+};
 
-         await newRegistration.save();
+module.exports = validate;
+```
 
-         res.status(201).json({ message: "登记成功", registration: newRegistration });
-       } catch (error) {
-         console.error("登记时出错：", error);
-         res.status(500).json({ error: "服务器内部错误" });
-       }
-     }
-   );
+## 3. 路由控制器模式
 
-   module.exports = router;
-   ```
+### 3.1 控制器基类
+```javascript
+class BaseController {
+  constructor(model) {
+    this.model = model;
+  }
 
-3. **挂载路由**:
+  // 获取所有记录
+  getAll = async (req, res) => {
+    try {
+      const { page = 1, limit = 10, sort = '-createdAt' } = req.query;
+      const options = {
+        page: parseInt(page),
+        limit: parseInt(limit),
+        sort
+      };
 
-   在主应用文件中挂载该路由。
+      const data = await this.model.paginate({}, options);
+      res.json(data);
+    } catch (error) {
+      res.status(500).json({ message: error.message });
+    }
+  };
 
-   ```javascript
-   // src/index.js
-   const registrationRouter = require("./router/activity/registration");
+  // 获取单个记录
+  getById = async (req, res) => {
+    try {
+      const doc = await this.model.findById(req.params.id);
+      if (!doc) {
+        return res.status(404).json({ message: 'Not found' });
+      }
+      res.json(doc);
+    } catch (error) {
+      res.status(500).json({ message: error.message });
+    }
+  };
 
-   app.use("/activity", registrationRouter);
-   ```
+  // 创建记录
+  create = async (req, res) => {
+    try {
+      const doc = new this.model(req.body);
+      const savedDoc = await doc.save();
+      res.status(201).json(savedDoc);
+    } catch (error) {
+      res.status(400).json({ message: error.message });
+    }
+  };
+
+  // 更新记录
+  update = async (req, res) => {
+    try {
+      const doc = await this.model.findByIdAndUpdate(
+        req.params.id,
+        req.body,
+        { new: true, runValidators: true }
+      );
+      if (!doc) {
+        return res.status(404).json({ message: 'Not found' });
+      }
+      res.json(doc);
+    } catch (error) {
+      res.status(400).json({ message: error.message });
+    }
+  };
+
+  // 删除记录
+  delete = async (req, res) => {
+    try {
+      const doc = await this.model.findByIdAndDelete(req.params.id);
+      if (!doc) {
+        return res.status(404).json({ message: 'Not found' });
+      }
+      res.json({ message: 'Successfully deleted' });
+    } catch (error) {
+      res.status(500).json({ message: error.message });
+    }
+  };
+}
+
+module.exports = BaseController;
+```
+
+### 3.2 具体控制器实现
+```javascript
+const BaseController = require('./BaseController');
+const UserModel = require('../models/User');
+
+class UserController extends BaseController {
+  constructor() {
+    super(UserModel);
+  }
+
+  // 自定义方法
+  async updateProfile(req, res) {
+    try {
+      const { id } = req.params;
+      const { name, email } = req.body;
+
+      const user = await this.model.findByIdAndUpdate(
+        id,
+        { name, email },
+        { new: true }
+      );
+
+      if (!user) {
+        return res.status(404).json({ message: 'User not found' });
+      }
+
+      res.json(user);
+    } catch (error) {
+      res.status(400).json({ message: error.message });
+    }
+  }
+}
+
+module.exports = new UserController();
+```
+
+## 4. 路由配置最佳实践
+
+### 4.1 API 版本控制
+```javascript
+// src/routes/api/v1/index.js
+const express = require('express');
+const router = express.Router();
+
+router.use('/users', require('./users'));
+router.use('/products', require('./products'));
+
+module.exports = router;
+
+// src/app.js
+app.use('/api/v1', require('./routes/api/v1'));
+```
+
+### 4.2 错误处理中间件
+```javascript
+const errorHandler = (err, req, res, next) => {
+  console.error(err.stack);
+
+  const status = err.status || 500;
+  const message = err.message || 'Something went wrong!';
+
+  res.status(status).json({
+    status: 'error',
+    message,
+    ...(process.env.NODE_ENV === 'development' && { stack: err.stack })
+  });
+};
+
+// 注册错误处理中间件
+app.use(errorHandler);
+```
+
+## 5. 路由安全实践
+
+### 5.1 请求限制
+```javascript
+const rateLimit = require('express-rate-limit');
+
+const limiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15分钟
+  max: 100 // 限制每个IP 15分钟内最多100次请求
+});
+
+// 应用到所有路由
+app.use(limiter);
+
+// 或应用到特定路由
+app.use('/api/', limiter);
+```
+
+### 5.2 安全头部配置
+```javascript
+const helmet = require('helmet');
+
+app.use(helmet()); // 添加各种 HTTP 头部安全配置
+```
+
+## 6. 路由文档生成
+
+### 6.1 Swagger 配置
+```javascript
+const swaggerJsdoc = require('swagger-jsdoc');
+const swaggerUi = require('swagger-ui-express');
+
+const options = {
+  definition: {
+    openapi: '3.0.0',
+    info: {
+      title: 'API Documentation',
+      version: '1.0.0',
+    },
+  },
+  apis: ['./src/routes/*.js'], // 路由文件路径
+};
+
+const specs = swaggerJsdoc(options);
+app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(specs));
+```
+
+### 6.2 路由注释示例
+```javascript
+/**
+ * @swagger
+ * /api/users:
+ *   get:
+ *     summary: 获取用户列表
+ *     tags: [Users]
+ *     parameters:
+ *       - in: query
+ *         name: page
+ *         schema:
+ *           type: integer
+ *         description: 页码
+ *     responses:
+ *       200:
+ *         description: 成功返回用户列表
+ */
+router.get('/users', controller.getUsers);
+```

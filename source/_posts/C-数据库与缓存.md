@@ -4,189 +4,318 @@ date: 2024-11-21 16:34:03
 categories: 
   - 笔记
 ---
-### 4. 数据库与缓存配置
+## 1. MongoDB 配置
 
-#### 4.1 `src/config/mongodb.js`
-
-**路径**: `src/config/mongodb.js`
-
-**作用**: 配置并连接到 MongoDB 数据库，管理数据库连接的建立和错误处理。使用 Mongoose 作为 ODM（对象文档映射）工具。
-
-**内容**:
-
+### 1.1 基础配置
 ```javascript
-const mongoose = require("mongoose");
-const dotenv = require("dotenv");
+const mongoose = require('mongoose');
+const dotenv = require('dotenv');
 
-dotenv.config();
-
-require("dotenv").config({
-  path: `.env.${process.env.NODE_ENV}`, // 根据 NODE_ENV 选择加载对应的 .env 文件
-});
-const mongoURL = process.env.MONGO_URL;
-
-// 连接到 MongoDB
-mongoose
-  .connect(mongoURL, {
-    useNewUrlParser: true,
-    useUnifiedTopology: true,
-  })
-  .then(() => {
-    console.info("成功连接到 MongoDB", mongoURL);
-  })
-  .catch((err) => {
-    console.warn("连接到 MongoDB 失败:", err);
-    process.exit(1); // 连接失败时退出应用
-  });
-
-module.exports = mongoose;
-```
-
-**功能说明**:
-
-- **加载环境变量**: 使用 `dotenv` 根据 `NODE_ENV` 加载对应的 `.env` 文件，获取 `MONGO_URL`。
-- **连接 MongoDB**: 使用 `mongoose.connect` 方法连接到 MongoDB 数据库。
-- **连接成功/失败处理**: 成功时打印连接信息，失败时打印错误并退出应用。
-- **导出 Mongoose 实例**: 供项目中其他模块使用 Mongoose 进行数据库操作。
-
-**使用步骤**:
-
-1. **安装依赖**:
-
-   确保项目中已安装 `mongoose` 和 `dotenv`。
-
-   ```bash
-   npm install mongoose dotenv
-   ```
-
-2. **配置环境变量**:
-
-   在 `.env.development` 和 `.env.production` 中定义 `MONGO_URL`，指向相应环境的 MongoDB 实例。
-
-   ```dotenv
-   MONGO_URL=mongodb://localhost:27017/myapp-dev
-   ```
-
-3. **引入数据库配置**:
-
-   在应用的入口文件（如 `src/index.js`）中引入 `mongodb.js`，以确保数据库在应用启动时连接。
-
-   ```javascript
-   // src/index.js
-   const mongoose = require("./config/mongodb");
-   ```
-
-4. **定义和使用 Mongoose 模型**:
-
-   在 `src/models/` 目录下定义 Mongoose 模型，并在业务逻辑中使用它们。
-
-   ```javascript
-   // src/models/user/User.js
-   const mongoose = require("mongoose");
-
-   const userSchema = new mongoose.Schema({
-     username: { type: String, required: true, unique: true },
-     password: { type: String, required: true },
-     // 其他字段...
-   });
-
-   module.exports = mongoose.model("User", userSchema);
-   ```
-
-#### 4.2 `src/config/redis.js`
-
-**路径**: `src/config/redis.js`
-
-**作用**: 配置并连接到 Redis，用于缓存和分布式锁等功能。使用 `ioredis` 作为 Redis 客户端，并处理连接和关闭。
-
-**内容**:
-
-```javascript
-const Redis = require("ioredis");
-const dotenv = require("dotenv");
-
-// 加载对应的环境配置文件
-dotenv.config({ path: `.env.${process.env.NODE_ENV}` });
-
-const redisURL = process.env.REDIS_URL;
-
-const db = process.env.NODE_ENV === "development" ? 1 : 0;
-
-// 创建 ioredis 客户端
-const redisClient = new Redis(redisURL, {
-  db,
-  // 其他配置，如密码、超时等
-});
-
-// 处理应用程序退出时的 Redis 关闭
-process.on("SIGINT", async () => {
-  try {
-    await redisClient.quit();
-    console.info("Redis 客户端已关闭");
-    process.exit(0);
-  } catch (err) {
-    console.error("关闭 Redis 客户端时发生错误:", err);
-    process.exit(1);
+class DatabaseConfig {
+  constructor() {
+    this.loadEnvConfig();
+    this.options = {
+      useNewUrlParser: true,
+      useUnifiedTopology: true,
+      autoIndex: true,
+      serverSelectionTimeoutMS: 5000,
+      socketTimeoutMS: 45000,
+    };
   }
-});
 
-module.exports = redisClient;
+  loadEnvConfig() {
+    dotenv.config({
+      path: `.env.${process.env.NODE_ENV}`
+    });
+    this.mongoUrl = process.env.MONGO_URL;
+  }
+
+  async connect() {
+    try {
+      await mongoose.connect(this.mongoUrl, this.options);
+      console.log('MongoDB connected successfully');
+      this.setupListeners();
+    } catch (error) {
+      console.error('MongoDB connection error:', error);
+      process.exit(1);
+    }
+  }
+
+  setupListeners() {
+    mongoose.connection.on('error', err => {
+      console.error('MongoDB error:', err);
+    });
+
+    mongoose.connection.on('disconnected', () => {
+      console.warn('MongoDB disconnected');
+    });
+
+    process.on('SIGINT', this.gracefulShutdown.bind(this));
+  }
+
+  async gracefulShutdown() {
+    try {
+      await mongoose.connection.close();
+      console.log('MongoDB connection closed');
+      process.exit(0);
+    } catch (error) {
+      console.error('Error during MongoDB shutdown:', error);
+      process.exit(1);
+    }
+  }
+}
+
+module.exports = new DatabaseConfig();
 ```
 
-**功能说明**:
+### 1.2 连接池配置
+```javascript
+const mongooseOptions = {
+  poolSize: 10,                    // 连接池大小
+  bufferMaxEntries: 0,            // 禁用缓冲
+  connectTimeoutMS: 10000,        // 连接超时时间
+  socketTimeoutMS: 45000,         // Socket 超时时间
+  family: 4,                      // 使用 IPv4
+  keepAlive: true,               // 保持连接活跃
+  keepAliveInitialDelay: 300000  // 保活初始延迟
+};
+```
 
-- **加载环境变量**: 使用 `dotenv` 根据 `NODE_ENV` 加载对应的 `.env` 文件，获取 `REDIS_URL`。
-- **创建 Redis 客户端**: 使用 `ioredis` 连接到指定的 Redis 实例，选择数据库 `1`（开发环境）或 `0`（其他环境）。
-- **处理关闭事件**: 监听 `SIGINT` 信号（如 Ctrl+C），优雅地关闭 Redis 连接，确保资源释放。
-- **导出 Redis 客户端实例**: 供项目中其他模块使用 Redis 进行缓存、锁机制等操作。
+## 2. Redis 配置
 
-**使用步骤**:
+### 2.1 Redis 客户端配置
+```javascript
+const Redis = require('ioredis');
 
-1. **安装依赖**:
+class RedisConfig {
+  constructor() {
+    this.loadEnvConfig();
+    this.options = {
+      db: this.getDbNumber(),
+      retryStrategy: this.retryStrategy,
+      maxRetriesPerRequest: null,
+      enableReadyCheck: true,
+      reconnectOnError: this.reconnectOnError
+    };
+  }
 
-   确保项目中已安装 `ioredis` 和 `dotenv`。
+  loadEnvConfig() {
+    this.redisUrl = process.env.REDIS_URL;
+  }
 
-   ```bash
-   npm install ioredis dotenv
-   ```
+  getDbNumber() {
+    return process.env.NODE_ENV === 'development' ? 1 : 0;
+  }
 
-2. **配置环境变量**:
+  retryStrategy(times) {
+    const delay = Math.min(times * 50, 2000);
+    return delay;
+  }
 
-   在 `.env.development` 和 `.env.production` 中定义 `REDIS_URL`，指向相应环境的 Redis 实例。
+  reconnectOnError(err) {
+    const targetError = 'READONLY';
+    if (err.message.includes(targetError)) {
+      return true;
+    }
+    return false;
+  }
 
-   ```dotenv
-   REDIS_URL=redis://localhost:6379
-   ```
+  createClient() {
+    const client = new Redis(this.redisUrl, this.options);
+    this.setupListeners(client);
+    return client;
+  }
 
-3. **引入 Redis 配置**:
+  setupListeners(client) {
+    client.on('connect', () => {
+      console.log('Redis connected');
+    });
 
-   在需要使用 Redis 的地方，导入 `redisClient`。
+    client.on('error', (err) => {
+      console.error('Redis error:', err);
+    });
 
-   ```javascript
-   // src/utils/redisCachePool.js
-   const redisClient = require("../config/redis");
+    client.on('ready', () => {
+      console.log('Redis ready');
+    });
 
-   async function getCardPoolFromCache(poolId) {
-     const poolData = await redisClient.get(`cardPool:${poolId}`);
-     return poolData ? JSON.parse(poolData) : null;
-   }
+    process.on('SIGINT', () => {
+      this.gracefulShutdown(client);
+    });
+  }
 
-   async function setCardPoolToCache(poolId, poolData) {
-     await redisClient.set(`cardPool:${poolId}`, JSON.stringify(poolData));
-   }
+  async gracefulShutdown(client) {
+    try {
+      await client.quit();
+      console.log('Redis connection closed');
+      process.exit(0);
+    } catch (error) {
+      console.error('Error during Redis shutdown:', error);
+      process.exit(1);
+    }
+  }
+}
 
-   module.exports = { getCardPoolFromCache, setCardPoolToCache };
-   ```
+module.exports = new RedisConfig();
+```
 
-4. **使用 Redis**:
+### 2.2 Redis 缓存管理器
+```javascript
+class RedisCacheManager {
+  constructor(redisClient) {
+    this.client = redisClient;
+    this.defaultTTL = 3600; // 1小时
+  }
 
-   在业务逻辑中使用 `redisClient` 进行缓存操作或其他 Redis 功能。
+  async get(key) {
+    try {
+      const data = await this.client.get(key);
+      return data ? JSON.parse(data) : null;
+    } catch (error) {
+      console.error(`Error getting cache for key ${key}:`, error);
+      return null;
+    }
+  }
 
-   ```javascript
-   const redisClient = require("./config/redis");
+  async set(key, value, ttl = this.defaultTTL) {
+    try {
+      await this.client.set(
+        key,
+        JSON.stringify(value),
+        'EX',
+        ttl
+      );
+      return true;
+    } catch (error) {
+      console.error(`Error setting cache for key ${key}:`, error);
+      return false;
+    }
+  }
 
-   // 设置缓存
-   await redisClient.set("key", "value");
+  async delete(key) {
+    try {
+      await this.client.del(key);
+      return true;
+    } catch (error) {
+      console.error(`Error deleting cache for key ${key}:`, error);
+      return false;
+    }
+  }
 
-   // 获取缓存
-   const value = await redisClient.get("key");
+  async clear(pattern = '*') {
+    try {
+      const keys = await this.client.keys(pattern);
+      if (keys.length > 0) {
+        await this.client.del(keys);
+      }
+      return true;
+    } catch (error) {
+      console.error('Error clearing cache:', error);
+      return false;
+    }
+  }
+}
+
+module.exports = RedisCacheManager;
+```
+
+## 3. 环境配置管理
+
+### 3.1 环境变量配置
+```javascript
+// config/env.js
+const dotenv = require('dotenv');
+const path = require('path');
+
+class EnvConfig {
+  constructor() {
+    this.env = process.env.NODE_ENV || 'development';
+    this.loadEnvFile();
+    this.validateEnv();
+  }
+
+  loadEnvFile() {
+    const envPath = path.resolve(process.cwd(), `.env.${this.env}`);
+    dotenv.config({ path: envPath });
+  }
+
+  validateEnv() {
+    const requiredEnvVars = [
+      'MONGO_URL',
+      'REDIS_URL',
+      'JWT_SECRET'
+    ];
+
+    requiredEnvVars.forEach(varName => {
+      if (!process.env[varName]) {
+        throw new Error(`Missing required environment variable: ${varName}`);
+      }
+    });
+  }
+
+  get config() {
+    return {
+      mongodb: {
+        url: process.env.MONGO_URL,
+        options: {
+          useNewUrlParser: true,
+          useUnifiedTopology: true
+        }
+      },
+      redis: {
+        url: process.env.REDIS_URL,
+        db: this.env === 'development' ? 1 : 0
+      },
+      jwt: {
+        secret: process.env.JWT_SECRET,
+        expiresIn: '1d'
+      }
+    };
+  }
+}
+
+module.exports = new EnvConfig();
+```
+
+## 4. 使用示例
+
+### 4.1 数据库操作示例
+```javascript
+const db = require('./config/mongodb');
+const User = require('./models/User');
+
+async function createUser(userData) {
+  try {
+    await db.connect();
+    const user = new User(userData);
+    await user.save();
+    return user;
+  } catch (error) {
+    console.error('Error creating user:', error);
+    throw error;
+  }
+}
+```
+
+### 4.2 缓存操作示例
+```javascript
+const RedisConfig = require('./config/redis');
+const CacheManager = require('./utils/RedisCacheManager');
+
+const redisClient = RedisConfig.createClient();
+const cacheManager = new CacheManager(redisClient);
+
+async function getCachedData(key) {
+  try {
+    let data = await cacheManager.get(key);
+    if (!data) {
+      data = await fetchDataFromDB();
+      await cacheManager.set(key, data);
+    }
+    return data;
+  } catch (error) {
+    console.error('Error getting cached data:', error);
+    throw error;
+  }
+}
+```
