@@ -2,7 +2,8 @@
 title: Express与Fastify对比
 date: 2024-12-20 09:17:02
 tags:
-categories: 文章
+categories: 
+  - 文章
 ---
 Express 和 Fastify 都是用于构建 Web 应用和 API 的 Node.js 框架。虽然它们都提供了类似的功能，但在性能、设计哲学、插件系统等方面存在一些差异。
 
